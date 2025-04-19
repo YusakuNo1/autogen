@@ -141,25 +141,7 @@ def make_move(
     return f"Moved {piece_name} ({piece_symbol}) from {SQUARE_NAMES[new_move.from_square]} to {SQUARE_NAMES[new_move.to_square]}."
 
 
-def get_model_client():
-    from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
-    from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-
-    # Create the token provider
-    token_provider = get_bearer_token_provider(DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default")
-
-    az_model_client = AzureOpenAIChatCompletionClient(
-        azure_deployment="gpt-4o-mini",
-        model="gpt-4o-mini",
-        api_version="2024-10-01-preview",
-        azure_endpoint="https://{credential}.openai.azure.com/",
-        azure_ad_token_provider=token_provider,  # Optional if you choose key-based authentication.
-        # api_key="sk-...", # For key-based authentication.
-    )
-    return az_model_client
-
-
-async def chess_game(runtime: AgentRuntime, model_config: Dict[str, Any]) -> None:  # type: ignore
+async def chess_game(runtime: AgentRuntime, model_client : ChatCompletionClient) -> None:  # type: ignore
     """Create agents for a chess game and return the group chat."""
 
     # Create the board.
@@ -223,9 +205,6 @@ async def chess_game(runtime: AgentRuntime, model_config: Dict[str, Any]) -> Non
         ),
     ]
 
-    # model_client = ChatCompletionClient.load_component(model_config)
-    model_client = get_model_client()
-
     # Register the agents.
     await ToolAgent.register(
         runtime,
@@ -269,7 +248,8 @@ async def chess_game(runtime: AgentRuntime, model_config: Dict[str, Any]) -> Non
 async def main(model_config: Dict[str, Any]) -> None:
     """Main Entrypoint."""
     runtime = SingleThreadedAgentRuntime()
-    await chess_game(runtime, model_config)
+    model_client = ChatCompletionClient.load_component(model_config)
+    await chess_game(runtime, model_client)
     runtime.start()
     # Publish an initial message to trigger the group chat manager to start
     # orchestration.
@@ -279,6 +259,7 @@ async def main(model_config: Dict[str, Any]) -> None:
         AgentId("PlayerWhite", "default"),
     )
     await runtime.stop_when_idle()
+    await model_client.close()
 
 
 if __name__ == "__main__":
